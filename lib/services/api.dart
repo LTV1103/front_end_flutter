@@ -35,14 +35,44 @@ class ApiService {
   }
 
   Future<dynamic> themLoiNhacThuoc(Map<String, dynamic> data) async {
-    return _postRequest('uongthuoc', data);
+    try {
+      final response = await http.post(
+        Uri.parse('https://node-js-api.up.railway.app/api/uongthuoc'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode(data),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        print(
+          'API Response Body: ${response.body}',
+        ); // Kiểm tra phản hồi từ API
+        return json.decode(response.body);
+      } else {
+        print('API Error: ${response.statusCode} - ${response.body}');
+        throw Exception('Lỗi API: ${response.statusCode} - ${response.body}');
+      }
+    } catch (e) {
+      print('API Exception: $e');
+      throw Exception('Lỗi khi gọi API: $e');
+    }
   }
 
-  Future<dynamic> capNhatLoiNhacThuoc(
-    String id,
-    Map<String, dynamic> data,
-  ) async {
-    return _putRequest('uongthuoc/$id', data);
+  Future<dynamic> capNhatLoiNhacThuoc(Map<String, dynamic> data, int id) async {
+    try {
+      final response = await http.put(
+        Uri.parse('https://node-js-api.up.railway.app/api/uongthuoc/$id'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode(data),
+      );
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else {
+        throw Exception('Lỗi API: ${response.statusCode} - ${response.body}');
+      }
+    } catch (e) {
+      throw Exception('Lỗi khi gọi API: $e');
+    }
   }
 
   Future<dynamic> xoaLoiNhacThuoc(int id) async {
@@ -126,11 +156,11 @@ class ApiService {
     return _postRequest('uongnuoc/them', data);
   }
 
-  Future<dynamic> capNhatLuongNuoc(Map<String, dynamic> data) async {
+  Future<dynamic> capNhatLuongNuoc(Map<String, dynamic> data, int maLuongNuoc) async {
     return _putRequest('uongnuoc/capnhat', data);
   }
 
-  Future<dynamic> xoaLuongNuoc(String id) async {
+  Future<dynamic> xoaLuongNuoc(int id) async {
     return _deleteRequest('uongnuoc/xoa/$id');
   }
 

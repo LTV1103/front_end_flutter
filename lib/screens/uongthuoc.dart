@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:intl/intl.dart';
 import '../services/api.dart';
+import '../models/uongthuoc_model.dart';
 
 class UongThuocScreen extends StatefulWidget {
   final int userId;
@@ -14,7 +15,7 @@ class UongThuocScreen extends StatefulWidget {
 
 class _UongThuocScreenState extends State<UongThuocScreen> {
   final ApiService _apiService = ApiService();
-  List<dynamic>? _uongThuocData;
+  List<UongThuoc>? _uongThuocData;
   bool _isLoading = true;
 
   final FlutterLocalNotificationsPlugin _flutterLocalNotificationsPlugin =
@@ -63,7 +64,8 @@ class _UongThuocScreenState extends State<UongThuocScreen> {
     try {
       final data = await _apiService.layLoiNhacThuoc(widget.userId.toString());
       setState(() {
-        _uongThuocData = data;
+        _uongThuocData =
+            data.map<UongThuoc>((item) => UongThuoc.fromJson(item)).toList();
         _isLoading = false;
       });
       _checkAndNotify();
@@ -80,18 +82,15 @@ class _UongThuocScreenState extends State<UongThuocScreen> {
   void _checkAndNotify() {
     final now = TimeOfDay.now();
     for (var item in _uongThuocData ?? []) {
-      final thoiGianNhac = item['thoi_gian_nhac'];
-      if (thoiGianNhac != null) {
-        final parts = thoiGianNhac.split(':');
-        if (parts.length == 2) {
-          final hour = int.tryParse(parts[0]);
-          final minute = int.tryParse(parts[1]);
-          if (hour == now.hour && minute == now.minute) {
-            _showNotification(
-              'Nhắc nhở uống thuốc',
-              'Đã đến giờ uống thuốc: ${item['ten_thuoc'] ?? 'Không có'}',
-            );
-          }
+      final parts = item.thoiGianNhac.split(':');
+      if (parts.length == 3) {
+        final hour = int.tryParse(parts[0]);
+        final minute = int.tryParse(parts[1]);
+        if (hour == now.hour && minute == now.minute) {
+          _showNotification(
+            'Nhắc nhở uống thuốc',
+            'Đã đến giờ uống thuốc: ${item.tenThuoc}',
+          );
         }
       }
     }
@@ -114,9 +113,7 @@ class _UongThuocScreenState extends State<UongThuocScreen> {
                 Navigator.of(context).pop();
                 try {
                   await _apiService.xoaLoiNhacThuoc(id);
-                  setState(() {
-                    _uongThuocData!.removeAt(index);
-                  });
+                  await _fetchUongThuocData(); // Reload danh sách sau khi xóa thành công
                   ScaffoldMessenger.of(
                     context,
                   ).showSnackBar(SnackBar(content: Text('Xóa thành công')));
@@ -134,9 +131,48 @@ class _UongThuocScreenState extends State<UongThuocScreen> {
     );
   }
 
+  void _addNewMedicine(
+    String tenThuoc,
+    String lieuLuong,
+    TimeOfDay thoiGian,
+    DateTime startDate,
+    DateTime endDate,
+  ) {
+    final formattedTime =
+        '${thoiGian.hour.toString().padLeft(2, '0')}:${thoiGian.minute.toString().padLeft(2, '0')}:00';
+
+    final newMedicine = UongThuoc(
+      maNhacNho: 0, // Không cần gửi trường này lên API
+      maNguoiDung: widget.userId,
+      tenThuoc: tenThuoc,
+      lieuLuong: lieuLuong,
+      thoiGianNhac: formattedTime,
+      ngayBatDau: startDate,
+      ngayKetThuc: endDate,
+    );
+
+    print(
+      'Dữ liệu gửi lên API: ${newMedicine.toJson(includeId: false)}',
+    ); // Kiểm tra dữ liệu JSON
+
+    _apiService
+        .themLoiNhacThuoc(newMedicine.toJson(includeId: false))
+        .then((response) async {
+          await _fetchUongThuocData(); // Reload danh sách sau khi thêm thành công
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Thêm thuốc thành công')));
+        })
+        .catchError((error) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Lỗi khi thêm thuốc: $error')));
+        });
+  }
+
   void _showAddMedicineDialog(BuildContext context) {
-    final tenThuocController = TextEditingController();
-    final lieuLuongController = TextEditingController();
+    final TextEditingController tenThuocController = TextEditingController();
+    final TextEditingController lieuLuongController = TextEditingController();
     TimeOfDay? selectedTime;
     DateTime? startDate;
     DateTime? endDate;
@@ -145,10 +181,10 @@ class _UongThuocScreenState extends State<UongThuocScreen> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: Text('Thêm mới thuốc'),
+          title: Text('Thêm thuốc mới'),
           content: SingleChildScrollView(
             child: Column(
-              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 TextField(
                   controller: tenThuocController,
@@ -159,84 +195,48 @@ class _UongThuocScreenState extends State<UongThuocScreen> {
                   decoration: InputDecoration(labelText: 'Liều lượng'),
                   keyboardType: TextInputType.number,
                 ),
-                SizedBox(height: 16),
-                Row(
-                  children: [
-                    Text(
-                      selectedTime == null
-                          ? 'Chọn thời gian'
-                          : 'Thời gian: ${selectedTime!.format(context)}',
-                    ),
-                    Spacer(),
-                    TextButton(
-                      onPressed: () async {
-                        final pickedTime = await showTimePicker(
-                          context: context,
-                          initialTime: TimeOfDay.now(),
-                        );
-                        if (pickedTime != null) {
-                          setState(() {
-                            selectedTime = pickedTime;
-                          });
-                        }
-                      },
-                      child: Text('Chọn'),
-                    ),
-                  ],
+                SizedBox(height: 8),
+                TextButton(
+                  onPressed: () async {
+                    final pickedTime = await showTimePicker(
+                      context: context,
+                      initialTime: TimeOfDay.now(),
+                    );
+                    if (pickedTime != null) {
+                      selectedTime = pickedTime;
+                    }
+                  },
+                  child: Text('Chọn thời gian nhắc'),
                 ),
-                SizedBox(height: 16),
-                Row(
-                  children: [
-                    Text(
-                      startDate == null
-                          ? 'Ngày bắt đầu'
-                          : 'Bắt đầu: ${DateFormat('yyyy-MM-dd').format(startDate!)}',
-                    ),
-                    Spacer(),
-                    TextButton(
-                      onPressed: () async {
-                        final picked = await showDatePicker(
-                          context: context,
-                          initialDate: DateTime.now(),
-                          firstDate: DateTime(2000),
-                          lastDate: DateTime(2100),
-                        );
-                        if (picked != null) {
-                          setState(() {
-                            startDate = picked;
-                          });
-                        }
-                      },
-                      child: Text('Chọn'),
-                    ),
-                  ],
+                SizedBox(height: 8),
+                TextButton(
+                  onPressed: () async {
+                    final pickedDate = await showDatePicker(
+                      context: context,
+                      initialDate: DateTime.now(),
+                      firstDate: DateTime.now(),
+                      lastDate: DateTime(2100),
+                    );
+                    if (pickedDate != null) {
+                      startDate = pickedDate;
+                    }
+                  },
+                  child: Text('Chọn ngày bắt đầu'),
                 ),
-                SizedBox(height: 16),
-                Row(
-                  children: [
-                    Text(
-                      endDate == null
-                          ? 'Ngày kết thúc'
-                          : 'Kết thúc: ${DateFormat('yyyy-MM-dd').format(endDate!)}',
-                    ),
-                    Spacer(),
-                    TextButton(
-                      onPressed: () async {
-                        final picked = await showDatePicker(
-                          context: context,
-                          initialDate: DateTime.now(),
-                          firstDate: DateTime(2000),
-                          lastDate: DateTime(2100),
-                        );
-                        if (picked != null) {
-                          setState(() {
-                            endDate = picked;
-                          });
-                        }
-                      },
-                      child: Text('Chọn'),
-                    ),
-                  ],
+                SizedBox(height: 8),
+                TextButton(
+                  onPressed: () async {
+                    final pickedDate = await showDatePicker(
+                      context: context,
+                      initialDate: DateTime.now(),
+                      firstDate: DateTime.now(),
+                      lastDate: DateTime(2100),
+                    );
+                    if (pickedDate != null) {
+                      endDate = pickedDate;
+                    }
+                  },
+                  child: Text('Chọn ngày kết thúc'),
                 ),
               ],
             ),
@@ -267,7 +267,7 @@ class _UongThuocScreenState extends State<UongThuocScreen> {
                   );
                 }
               },
-              child: Text('Thêm'),
+              child: Text('Lưu'),
             ),
           ],
         );
@@ -275,54 +275,135 @@ class _UongThuocScreenState extends State<UongThuocScreen> {
     );
   }
 
-  void _addNewMedicine(
-    String tenThuoc,
-    String lieuLuong,
-    TimeOfDay thoiGian,
-    DateTime startDate,
-    DateTime endDate,
-  ) {
-    final formattedTime =
-        '${thoiGian.hour.toString().padLeft(2, '0')}:${thoiGian.minute.toString().padLeft(2, '0')}';
+  void _editMedicine(UongThuoc medicine, int index) {
+    final TextEditingController tenThuocController = TextEditingController(
+      text: medicine.tenThuoc,
+    );
+    final TextEditingController lieuLuongController = TextEditingController(
+      text: medicine.lieuLuong,
+    );
+    TimeOfDay? selectedTime = TimeOfDay(
+      hour: int.parse(medicine.thoiGianNhac.split(':')[0]),
+      minute: int.parse(medicine.thoiGianNhac.split(':')[1]),
+    );
+    DateTime? startDate = medicine.ngayBatDau;
+    DateTime? endDate = medicine.ngayKetThuc;
 
-    final isDuplicate =
-        _uongThuocData?.any(
-          (item) =>
-              item['ten_thuoc'] == tenThuoc &&
-              item['thoi_gian_nhac'] == formattedTime &&
-              item['lieu_luong'] == lieuLuong,
-        ) ??
-        false;
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('Sửa thông tin thuốc'),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: tenThuocController,
+                  decoration: InputDecoration(labelText: 'Tên thuốc'),
+                ),
+                TextField(
+                  controller: lieuLuongController,
+                  decoration: InputDecoration(labelText: 'Liều lượng'),
+                  keyboardType: TextInputType.number,
+                ),
+                SizedBox(height: 8),
+                TextButton(
+                  onPressed: () async {
+                    final pickedTime = await showTimePicker(
+                      context: context,
+                      initialTime: selectedTime ?? TimeOfDay.now(),
+                    );
+                    if (pickedTime != null) {
+                      selectedTime = pickedTime;
+                    }
+                  },
+                  child: Text('Chọn thời gian nhắc'),
+                ),
+                SizedBox(height: 8),
+                TextButton(
+                  onPressed: () async {
+                    final pickedDate = await showDatePicker(
+                      context: context,
+                      initialDate: startDate ?? DateTime.now(),
+                      firstDate: DateTime.now(),
+                      lastDate: DateTime(2100),
+                    );
+                    if (pickedDate != null) {
+                      startDate = pickedDate;
+                    }
+                  },
+                  child: Text('Chọn ngày bắt đầu'),
+                ),
+                SizedBox(height: 8),
+                TextButton(
+                  onPressed: () async {
+                    final pickedDate = await showDatePicker(
+                      context: context,
+                      initialDate: endDate ?? DateTime.now(),
+                      firstDate: DateTime.now(),
+                      lastDate: DateTime(2100),
+                    );
+                    if (pickedDate != null) {
+                      endDate = pickedDate;
+                    }
+                  },
+                  child: Text('Chọn ngày kết thúc'),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('Hủy'),
+            ),
+            TextButton(
+              onPressed: () async {
+                // Sử dụng giá trị hiện tại nếu người dùng không thay đổi
+                final updatedMedicine = UongThuoc(
+                  maNhacNho: medicine.maNhacNho,
+                  maNguoiDung: widget.userId,
+                  tenThuoc:
+                      tenThuocController.text.isNotEmpty
+                          ? tenThuocController.text
+                          : medicine.tenThuoc,
+                  lieuLuong:
+                      lieuLuongController.text.isNotEmpty
+                          ? lieuLuongController.text
+                          : medicine.lieuLuong,
+                  thoiGianNhac:
+                      selectedTime != null
+                          ? '${selectedTime!.hour.toString().padLeft(2, '0')}:${selectedTime!.minute.toString().padLeft(2, '0')}:00'
+                          : medicine.thoiGianNhac,
+                  ngayBatDau: startDate ?? medicine.ngayBatDau,
+                  ngayKetThuc: endDate ?? medicine.ngayKetThuc,
+                );
 
-    if (isDuplicate) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Lời nhắc đã tồn tại!')));
-      return;
-    }
-
-    final newMedicine = {
-      'maNguoiDung': widget.userId,
-      'tenThuoc': tenThuoc,
-      'lieuLuong': lieuLuong,
-      'thoiGianNhac': formattedTime,
-      'ngayBatDau': DateFormat('yyyy-MM-dd').format(startDate),
-      'ngayKetThuc': DateFormat('yyyy-MM-dd').format(endDate),
-    };
-
-    _apiService
-        .themLoiNhacThuoc(newMedicine)
-        .then((response) async {
-          await _fetchUongThuocData(); // GỌI LẠI API ĐỂ LOAD ĐÚNG DỮ LIỆU
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('Thêm thuốc thành công')));
-        })
-        .catchError((error) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('Lỗi khi thêm thuốc: $error')));
-        });
+                try {
+                  await _apiService.capNhatLoiNhacThuoc(
+                    updatedMedicine.toJson(),
+                    medicine.maNhacNho,
+                  );
+                  setState(() {
+                    _uongThuocData![index] = updatedMedicine;
+                  });
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Cập nhật thuốc thành công')),
+                  );
+                  Navigator.of(context).pop();
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Lỗi khi cập nhật thuốc: $e')),
+                  );
+                }
+              },
+              child: Text('Lưu'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
@@ -347,13 +428,14 @@ class _UongThuocScreenState extends State<UongThuocScreen> {
                 itemCount: _uongThuocData!.length,
                 itemBuilder: (context, index) {
                   final item = _uongThuocData![index];
-                  final int? id = item['ma_nhac_nho'];
 
                   return GestureDetector(
                     onLongPress: () {
-                      if (id != null) {
-                        _showDeleteConfirmationDialog(context, id, index);
-                      }
+                      _showDeleteConfirmationDialog(
+                        context,
+                        item.maNhacNho,
+                        index,
+                      );
                     },
                     child: Card(
                       margin: const EdgeInsets.only(bottom: 16.0),
@@ -363,24 +445,29 @@ class _UongThuocScreenState extends State<UongThuocScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Tên thuốc: ${item['ten_thuoc'] ?? 'Không có'}',
+                              'Tên thuốc: ${item.tenThuoc}',
                               style: TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
                             SizedBox(height: 8),
+                            Text('Liều lượng: ${item.lieuLuong}'),
+                            Text('Thời gian nhắc: ${item.thoiGianNhac}'),
                             Text(
-                              'Liều lượng: ${item['lieu_luong'] ?? 'Không có'}',
+                              'Ngày bắt đầu: ${DateFormat('yyyy-MM-dd').format(item.ngayBatDau)}',
                             ),
                             Text(
-                              'Thời gian nhắc: ${item['thoi_gian_nhac'] ?? 'Không có'}',
+                              'Ngày kết thúc: ${DateFormat('yyyy-MM-dd').format(item.ngayKetThuc)}',
                             ),
-                            Text(
-                              'Ngày bắt đầu: ${item['ngay_bat_dau'] ?? 'Không có'}',
-                            ),
-                            Text(
-                              'Ngày kết thúc: ${item['ngay_ket_thuc'] ?? 'Không có'}',
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                IconButton(
+                                  icon: Icon(Icons.edit, color: Colors.blue),
+                                  onPressed: () => _editMedicine(item, index),
+                                ),
+                              ],
                             ),
                           ],
                         ),

@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../services/api.dart';
+import '../models/nhatky_model.dart';
 
 class ThemHoatDongScreen extends StatefulWidget {
   final int userId;
-  final Map<String, dynamic>? hoatDong;
+  final NhatKy? hoatDong;
 
   const ThemHoatDongScreen({super.key, required this.userId, this.hoatDong});
 
@@ -16,7 +17,7 @@ class _ThemHoatDongScreenState extends State<ThemHoatDongScreen> {
   final ApiService _apiService = ApiService();
   final _formKey = GlobalKey<FormState>();
   late String? _loaiHoatDong;
-  late TextEditingController _ngayController;
+  late DateTime? _ngayHoatDong;
   late TextEditingController _thoiGianController;
 
   final Map<String, double> _metValues = {
@@ -30,12 +31,10 @@ class _ThemHoatDongScreenState extends State<ThemHoatDongScreen> {
   @override
   void initState() {
     super.initState();
-    _loaiHoatDong = widget.hoatDong?['loai_hoat_dong'];
-    _ngayController = TextEditingController(
-      text: widget.hoatDong?['ngay_hoat_dong'] ?? '',
-    );
+    _loaiHoatDong = widget.hoatDong?.loaiHoatDong;
+    _ngayHoatDong = widget.hoatDong?.ngayHoatDong;
     _thoiGianController = TextEditingController(
-      text: widget.hoatDong?['thoi_gian_phut']?.toString() ?? '',
+      text: widget.hoatDong?.thoiGianPhut.toString() ?? '',
     );
   }
 
@@ -45,31 +44,36 @@ class _ThemHoatDongScreenState extends State<ThemHoatDongScreen> {
     try {
       if (widget.hoatDong == null) {
         // Dữ liệu cho thêm mới
-        final data = {
-          'loai_hoat_dong': _loaiHoatDong,
-          'ngay_hoat_dong': _ngayController.text,
-          'thoi_gian_phut': int.parse(_thoiGianController.text),
-        };
+        final newHoatDong = NhatKy(
+          maHoatDong: 0, 
+          loaiHoatDong: _loaiHoatDong!,
+          thoiGianPhut: int.parse(_thoiGianController.text),
+          caloTieuHao: _calculateCalories().toString(),
+          ngayHoatDong: _ngayHoatDong!,
+          maNguoiDung: widget.userId, // Thêm mã người dùng
+        );
+
         // Gọi API thêm mới
         final response = await _apiService.themHoatDongNhatKy(
           widget.userId.toString(),
-          data,
+          newHoatDong.toJson(),
         );
         _handleResponse(response, isUpdate: false);
       } else {
         // Dữ liệu cho cập nhật
-        final updatedData = {
-          'loai_hoat_dong': _loaiHoatDong,
-          'ngay_hoat_dong':
-              '${_ngayController.text} 00:00:00', // Định dạng ngày
-          'thoi_gian_phut': int.parse(_thoiGianController.text),
-          'ma_nguoi_dung': widget.userId,
-        };
+        final updatedHoatDong = NhatKy(
+          maHoatDong: widget.hoatDong!.maHoatDong,
+          loaiHoatDong: _loaiHoatDong!,
+          thoiGianPhut: int.parse(_thoiGianController.text),
+          caloTieuHao: _calculateCalories().toString(),
+          ngayHoatDong: _ngayHoatDong!,
+          maNguoiDung: widget.userId, // Thêm mã người dùng
+        );
 
         // Gọi API cập nhật
         final response = await _apiService.capNhatNhatKy(
-          updatedData,
-          widget.hoatDong!['ma_hoat_dong'],
+          updatedHoatDong.toJson(),
+          widget.hoatDong!.maHoatDong,
         );
         _handleResponse(response, isUpdate: true);
       }
@@ -78,6 +82,13 @@ class _ThemHoatDongScreenState extends State<ThemHoatDongScreen> {
         context,
       ).showSnackBar(SnackBar(content: Text('Lỗi khi xử lý: $e')));
     }
+  }
+
+  int _calculateCalories() {
+    final met = _metValues[_loaiHoatDong] ?? 0.0;
+    final thoiGian = int.parse(_thoiGianController.text);
+    const canNang = 70; // Giả định cân nặng người dùng là 70kg
+    return ((met * 3.5 * canNang / 200) * thoiGian).round();
   }
 
   void _handleResponse(
@@ -137,39 +148,40 @@ class _ThemHoatDongScreenState extends State<ThemHoatDongScreen> {
                   return null;
                 },
               ),
-              TextFormField(
-                controller: _ngayController,
-                readOnly: true,
-                decoration: InputDecoration(
-                  labelText: 'Ngày hoạt động (YYYY-MM-DD)',
-                  suffixIcon: IconButton(
-                    icon: Icon(Icons.calendar_today),
-                    onPressed: () async {
-                      final pickedDate = await showDatePicker(
-                        context: context,
-                        initialDate:
-                            _ngayController.text.isNotEmpty
-                                ? DateTime.parse(_ngayController.text)
-                                : DateTime.now(),
-                        firstDate: DateTime(2000),
-                        lastDate: DateTime(2100),
-                      );
-                      if (pickedDate != null) {
-                        setState(() {
-                          _ngayController.text = DateFormat(
-                            'yyyy-MM-dd',
-                          ).format(pickedDate);
-                        });
+              GestureDetector(
+                onTap: () async {
+                  final pickedDate = await showDatePicker(
+                    context: context,
+                    initialDate: _ngayHoatDong ?? DateTime.now(),
+                    firstDate: DateTime(2000),
+                    lastDate: DateTime(2100),
+                  );
+                  if (pickedDate != null) {
+                    setState(() {
+                      _ngayHoatDong = pickedDate;
+                    });
+                  }
+                },
+                child: AbsorbPointer(
+                  child: TextFormField(
+                    decoration: InputDecoration(
+                      labelText: 'Ngày hoạt động (YYYY-MM-DD)',
+                      suffixIcon: Icon(Icons.calendar_today),
+                    ),
+                    controller: TextEditingController(
+                      text:
+                          _ngayHoatDong != null
+                              ? DateFormat('yyyy-MM-dd').format(_ngayHoatDong!)
+                              : '',
+                    ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Vui lòng chọn ngày hoạt động';
                       }
+                      return null;
                     },
                   ),
                 ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Vui lòng chọn ngày hoạt động';
-                  }
-                  return null;
-                },
               ),
               TextFormField(
                 controller: _thoiGianController,

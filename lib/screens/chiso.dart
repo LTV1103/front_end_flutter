@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/api.dart';
+import '../models/chiso_model.dart';
 
 class ChiSoScreen extends StatefulWidget {
   final int userId;
@@ -12,8 +13,8 @@ class ChiSoScreen extends StatefulWidget {
 
 class _ChiSoScreenState extends State<ChiSoScreen> {
   final ApiService _apiService = ApiService();
-  Map<String, dynamic>? _userData;
-  List<Map<String, dynamic>> _dsChiSo = [];
+  ChiSo? _userData;
+  List<ChiSo> _dsChiSo = [];
   bool _isLoading = true;
 
   @override
@@ -27,8 +28,7 @@ class _ChiSoScreenState extends State<ChiSoScreen> {
       final List<dynamic> data = await _apiService.layChiSoTheoId(
         widget.userId,
       );
-      final List<Map<String, dynamic>> chiSoList =
-          data.map((e) => Map<String, dynamic>.from(e)).toList();
+      final List<ChiSo> chiSoList = data.map((e) => ChiSo.fromJson(e)).toList();
 
       setState(() {
         _userData = chiSoList.isNotEmpty ? chiSoList[0] : null;
@@ -180,9 +180,7 @@ class _ChiSoScreenState extends State<ChiSoScreen> {
         if (response['status'] == 'success') {
           // Cập nhật danh sách ngay lập tức
           setState(() {
-            _dsChiSo.removeWhere(
-              (chiSo) => chiSo['ma_chi_so'].toString() == id,
-            );
+            _dsChiSo.removeWhere((chiSo) => chiSo.maChiSo == id);
             _userData = _dsChiSo.isNotEmpty ? _dsChiSo[0] : null;
           });
 
@@ -262,11 +260,13 @@ class _ChiSoScreenState extends State<ChiSoScreen> {
                         keyboardType: TextInputType.number,
                         onChanged: (_) => tinhBMI(),
                         validator: (value) {
-                          if (value == null || value.isEmpty)
+                          if (value == null || value.isEmpty) {
                             return 'Nhập chiều cao';
+                          }
                           final parsed = double.tryParse(value);
-                          if (parsed == null || parsed <= 0)
+                          if (parsed == null || parsed <= 0) {
                             return 'Chiều cao không hợp lệ';
+                          }
                           return null;
                         },
                       ),
@@ -276,11 +276,13 @@ class _ChiSoScreenState extends State<ChiSoScreen> {
                         keyboardType: TextInputType.number,
                         onChanged: (_) => tinhBMI(),
                         validator: (value) {
-                          if (value == null || value.isEmpty)
+                          if (value == null || value.isEmpty) {
                             return 'Nhập cân nặng';
+                          }
                           final parsed = double.tryParse(value);
-                          if (parsed == null || parsed <= 0)
+                          if (parsed == null || parsed <= 0) {
                             return 'Cân nặng không hợp lệ';
+                          }
                           return null;
                         },
                       ),
@@ -290,8 +292,9 @@ class _ChiSoScreenState extends State<ChiSoScreen> {
                           labelText: 'Huyết áp (vd: 120/80)',
                         ),
                         validator: (value) {
-                          if (value == null || value.isEmpty)
+                          if (value == null || value.isEmpty) {
                             return 'Nhập huyết áp';
+                          }
                           return null;
                         },
                       ),
@@ -300,11 +303,13 @@ class _ChiSoScreenState extends State<ChiSoScreen> {
                         decoration: InputDecoration(labelText: 'Nhịp tim'),
                         keyboardType: TextInputType.number,
                         validator: (value) {
-                          if (value == null || value.isEmpty)
+                          if (value == null || value.isEmpty) {
                             return 'Nhập nhịp tim';
+                          }
                           final parsed = int.tryParse(value);
-                          if (parsed == null || parsed <= 0)
+                          if (parsed == null || parsed <= 0) {
                             return 'Nhịp tim không hợp lệ';
+                          }
                           return null;
                         },
                       ),
@@ -398,7 +403,7 @@ class _ChiSoScreenState extends State<ChiSoScreen> {
                         child: Row(
                           children: [
                             Image.asset(
-                              _userData!['gioi_tinh'] == 'Nam'
+                              _userData!.gioiTinh == 'Nam'
                                   ? 'assets/man.jpg'
                                   : 'assets/female.jpg',
                               width: 200,
@@ -416,7 +421,7 @@ class _ChiSoScreenState extends State<ChiSoScreen> {
                                   ),
                                 ),
                                 Text(
-                                  '${_userData!['ho_ten'] ?? 'Không có'}',
+                                  '${_userData!.hoTen}',
                                   style: TextStyle(
                                     fontSize: 18,
                                     fontWeight: FontWeight.bold,
@@ -431,7 +436,7 @@ class _ChiSoScreenState extends State<ChiSoScreen> {
                                   ),
                                 ),
                                 Text(
-                                  '${_userData!['gioi_tinh'] ?? 'Không có'}',
+                                  '${_userData!.gioiTinh}',
                                   style: TextStyle(
                                     fontSize: 18,
                                     fontWeight: FontWeight.bold,
@@ -454,8 +459,8 @@ class _ChiSoScreenState extends State<ChiSoScreen> {
                     SizedBox(height: 8),
                     ..._dsChiSo.map(
                       (chiSo) => GestureDetector(
-                        onTap: () => _suaChiSoDialog(chiSo),
-                        onLongPress: () => _xoaChiSoDialog(chiSo['ma_chi_so']),
+                        onTap: () => _suaChiSoDialog(chiSo.toJson()),
+                        onLongPress: () => _xoaChiSoDialog(chiSo.maChiSo),
                         child: Card(
                           margin: const EdgeInsets.only(bottom: 16),
                           shape: RoundedRectangleBorder(
@@ -467,7 +472,7 @@ class _ChiSoScreenState extends State<ChiSoScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Ngày đo: ${_formatDate(chiSo['ngay_do'])}',
+                                  'Ngày đo: ${_formatDate(chiSo.ngayDo)}',
                                   style: TextStyle(
                                     fontWeight: FontWeight.bold,
                                     fontSize: 16,
@@ -477,27 +482,27 @@ class _ChiSoScreenState extends State<ChiSoScreen> {
                                 SizedBox(height: 8),
                                 _buildInfoRow(
                                   'Chiều Cao:',
-                                  '${chiSo['chieu_cao_cm']} cm',
+                                  '${chiSo.chieuCaoCm} cm',
                                   Colors.blueAccent,
                                 ),
                                 _buildInfoRow(
                                   'Cân Nặng:',
-                                  '${chiSo['can_nang_kg']} kg',
+                                  '${chiSo.canNangKg} kg',
                                   Colors.blueAccent,
                                 ),
                                 _buildInfoRow(
                                   'Huyết Áp:',
-                                  '${chiSo['huyet_ap']}',
+                                  '${chiSo.huyetAp}',
                                   Colors.blueAccent,
                                 ),
                                 _buildInfoRow(
                                   'Nhịp Tim:',
-                                  '${chiSo['nhip_tim']} bpm',
+                                  '${chiSo.nhipTim} bpm',
                                   Colors.blueAccent,
                                 ),
                                 _buildInfoRow(
                                   'BMI:',
-                                  '${chiSo['BMI']}',
+                                  '${chiSo.bmi}',
                                   Colors.green,
                                 ),
                               ],
