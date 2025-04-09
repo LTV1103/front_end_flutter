@@ -45,7 +45,7 @@ class ApiService {
     return _putRequest('uongthuoc/$id', data);
   }
 
-  Future<dynamic> xoaLoiNhacThuoc(String id) async {
+  Future<dynamic> xoaLoiNhacThuoc(int id) async {
     return _deleteRequest('uongthuoc/$id');
   }
 
@@ -62,11 +62,11 @@ class ApiService {
     return _postRequest('chiso/$id', data);
   }
 
-  Future<dynamic> capNhatChiSo(int id, Map<String, dynamic> data) async {
+  Future<dynamic> capNhatChiSo(Map<String, dynamic> data, int id) async {
     return _putRequest('chiso/$id', data);
   }
 
-  Future<dynamic> xoaChiSo(String id) async {
+  Future<dynamic> xoaChiSo(int id) async {
     return _deleteRequest('chiso/$id');
   }
 
@@ -86,11 +86,30 @@ class ApiService {
     return _postRequest('nhatky/$id', data);
   }
 
-  Future<dynamic> capNhatNhatKy(String id, Map<String, dynamic> data) async {
-    return _putRequest('nhatky/$id', data);
+  Future<dynamic> capNhatNhatKy(Map<String, dynamic> data, int id) async {
+    try {
+      final response = await http.put(
+        Uri.parse('https://node-js-api.up.railway.app/api/nhatky/$id'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode(data),
+      );
+
+      if (response.statusCode == 200) {
+        final jsonBody = json.decode(response.body);
+        if (jsonBody['status'] == 'success') {
+          return jsonBody; // Trả về phản hồi nếu thành công
+        } else {
+          throw Exception(jsonBody['message'] ?? 'Lỗi cập nhật nhật ký');
+        }
+      } else {
+        throw Exception('Lỗi API: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Lỗi khi gọi API: $e');
+    }
   }
 
-  Future<dynamic> xoaNhatKy(String id) async {
+  Future<dynamic> xoaNhatKy(int id) async {
     return _deleteRequest('nhatky/$id');
   }
 

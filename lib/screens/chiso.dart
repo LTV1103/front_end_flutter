@@ -44,7 +44,7 @@ class _ChiSoScreenState extends State<ChiSoScreen> {
   }
 
   Future<void> _themChiSo() async {
-    final _formKey = GlobalKey<FormState>();
+    final formKey = GlobalKey<FormState>();
     final chieuCaoController = TextEditingController();
     final canNangController = TextEditingController();
     final huyetApController = TextEditingController();
@@ -56,7 +56,7 @@ class _ChiSoScreenState extends State<ChiSoScreen> {
           (context) => AlertDialog(
             title: Text('Thêm Chỉ Số Mới'),
             content: Form(
-              key: _formKey,
+              key: formKey,
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -113,7 +113,7 @@ class _ChiSoScreenState extends State<ChiSoScreen> {
               ),
               ElevatedButton(
                 onPressed: () async {
-                  if (_formKey.currentState!.validate()) {
+                  if (formKey.currentState!.validate()) {
                     final data = {
                       'chieu_cao': double.parse(chieuCaoController.text),
                       'can_nang': double.parse(canNangController.text),
@@ -153,7 +153,7 @@ class _ChiSoScreenState extends State<ChiSoScreen> {
     );
   }
 
-  void _xoaChiSoDialog(String id) async {
+  void _xoaChiSoDialog(int id) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder:
@@ -175,20 +175,28 @@ class _ChiSoScreenState extends State<ChiSoScreen> {
 
     if (confirm == true) {
       try {
-        await _apiService.xoaChiSo(id);
+        final response = await _apiService.xoaChiSo(id);
 
-        // Cập nhật danh sách ngay lập tức
-        setState(() {
-          _dsChiSo.removeWhere((chiSo) => chiSo['ma_chi_so'].toString() == id);
-          _userData = _dsChiSo.isNotEmpty ? _dsChiSo[0] : null;
-        });
+        if (response['status'] == 'success') {
+          // Cập nhật danh sách ngay lập tức
+          setState(() {
+            _dsChiSo.removeWhere(
+              (chiSo) => chiSo['ma_chi_so'].toString() == id,
+            );
+            _userData = _dsChiSo.isNotEmpty ? _dsChiSo[0] : null;
+          });
 
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Xoá thành công')));
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Xoá thành công')));
 
-        // Tải lại dữ liệu từ API để đảm bảo đồng bộ
-        _fetchUserData();
+          // Tải lại dữ liệu từ API để đảm bảo đồng bộ
+          _fetchUserData();
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Xoá thất bại: ${response['message']}')),
+          );
+        }
       } catch (e) {
         ScaffoldMessenger.of(
           context,
@@ -205,7 +213,9 @@ class _ChiSoScreenState extends State<ChiSoScreen> {
     final canNang = TextEditingController(
       text: chiSo['can_nang_kg'].toString(),
     );
-    final huyetAp = TextEditingController(text: chiSo['huyet_ap'].toString());
+    final huyetAp = TextEditingController(
+      text: chiSo['huyet_ap']?.toString() ?? '',
+    );
     final nhipTim = TextEditingController(text: chiSo['nhip_tim'].toString());
 
     double? bmi;
@@ -215,19 +225,24 @@ class _ChiSoScreenState extends State<ChiSoScreen> {
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setState) {
-            void _tinhBMI() {
+            void tinhBMI() {
               try {
-                final cc = double.parse(chieuCao.text);
-                final cn = double.parse(canNang.text);
-                if (cc > 0 && cn > 0) {
-                  final chieuCaoMet = cc / 100;
-                  final tinhBmi = cn / (chieuCaoMet * chieuCaoMet);
+                final cc = double.tryParse(chieuCao.text);
+                final cn = double.tryParse(canNang.text);
+                if (cc != null && cc > 0 && cn != null && cn > 0) {
+                  final bmiVal = cn / ((cc / 100) * (cc / 100));
                   setState(() {
-                    bmi = double.parse(tinhBmi.toStringAsFixed(2));
+                    bmi = double.parse(bmiVal.toStringAsFixed(2));
+                  });
+                } else {
+                  setState(() {
+                    bmi = null;
                   });
                 }
               } catch (_) {
-                // không làm gì cả
+                setState(() {
+                  bmi = null;
+                });
               }
             }
 
@@ -235,33 +250,72 @@ class _ChiSoScreenState extends State<ChiSoScreen> {
               title: Text('Sửa chỉ số'),
               content: Form(
                 key: formKey,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextFormField(
-                      controller: chieuCao,
-                      decoration: InputDecoration(labelText: 'Chiều cao (cm)'),
-                      keyboardType: TextInputType.number,
-                      onChanged: (_) => _tinhBMI(),
-                    ),
-                    TextFormField(
-                      controller: canNang,
-                      decoration: InputDecoration(labelText: 'Cân nặng (kg)'),
-                      keyboardType: TextInputType.number,
-                      onChanged: (_) => _tinhBMI(),
-                    ),
-                    TextFormField(
-                      controller: huyetAp,
-                      decoration: InputDecoration(labelText: 'Huyết áp'),
-                    ),
-                    TextFormField(
-                      controller: nhipTim,
-                      decoration: InputDecoration(labelText: 'Nhịp tim'),
-                      keyboardType: TextInputType.number,
-                    ),
-                    SizedBox(height: 10),
-                    if (bmi != null) Text('BMI: ${bmi!.toStringAsFixed(2)}'),
-                  ],
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextFormField(
+                        controller: chieuCao,
+                        decoration: InputDecoration(
+                          labelText: 'Chiều cao (cm)',
+                        ),
+                        keyboardType: TextInputType.number,
+                        onChanged: (_) => tinhBMI(),
+                        validator: (value) {
+                          if (value == null || value.isEmpty)
+                            return 'Nhập chiều cao';
+                          final parsed = double.tryParse(value);
+                          if (parsed == null || parsed <= 0)
+                            return 'Chiều cao không hợp lệ';
+                          return null;
+                        },
+                      ),
+                      TextFormField(
+                        controller: canNang,
+                        decoration: InputDecoration(labelText: 'Cân nặng (kg)'),
+                        keyboardType: TextInputType.number,
+                        onChanged: (_) => tinhBMI(),
+                        validator: (value) {
+                          if (value == null || value.isEmpty)
+                            return 'Nhập cân nặng';
+                          final parsed = double.tryParse(value);
+                          if (parsed == null || parsed <= 0)
+                            return 'Cân nặng không hợp lệ';
+                          return null;
+                        },
+                      ),
+                      TextFormField(
+                        controller: huyetAp,
+                        decoration: InputDecoration(
+                          labelText: 'Huyết áp (vd: 120/80)',
+                        ),
+                        validator: (value) {
+                          if (value == null || value.isEmpty)
+                            return 'Nhập huyết áp';
+                          return null;
+                        },
+                      ),
+                      TextFormField(
+                        controller: nhipTim,
+                        decoration: InputDecoration(labelText: 'Nhịp tim'),
+                        keyboardType: TextInputType.number,
+                        validator: (value) {
+                          if (value == null || value.isEmpty)
+                            return 'Nhập nhịp tim';
+                          final parsed = int.tryParse(value);
+                          if (parsed == null || parsed <= 0)
+                            return 'Nhịp tim không hợp lệ';
+                          return null;
+                        },
+                      ),
+                      SizedBox(height: 10),
+                      if (bmi != null)
+                        Text(
+                          'BMI: ${bmi!.toStringAsFixed(2)}',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                    ],
+                  ),
                 ),
               ),
               actions: [
@@ -269,14 +323,14 @@ class _ChiSoScreenState extends State<ChiSoScreen> {
                   onPressed: () => Navigator.pop(ctx),
                   child: Text('Huỷ'),
                 ),
-                TextButton(
+                ElevatedButton(
                   child: Text('Lưu'),
                   onPressed: () async {
+                    if (!formKey.currentState!.validate()) return;
                     try {
                       final cc = double.parse(chieuCao.text);
                       final cn = double.parse(canNang.text);
                       final tinhBmi = cn / ((cc / 100) * (cc / 100));
-
                       final data = {
                         'chieu_cao': cc,
                         'can_nang': cn,
@@ -286,12 +340,16 @@ class _ChiSoScreenState extends State<ChiSoScreen> {
                       };
 
                       final res = await _apiService.capNhatChiSo(
-                        chiSo['ma_chi_so'],
                         data,
+                        chiSo['ma_chi_so'],
                       );
 
                       if (res['status'] == 'success') {
                         Navigator.pop(ctx);
+                        _fetchUserData();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Cập nhật thành công')),
+                        );
                         _fetchUserData();
                       } else {
                         throw res['message'];
@@ -330,6 +388,7 @@ class _ChiSoScreenState extends State<ChiSoScreen> {
                   children: [
                     // Card thông tin người dùng
                     Card(
+                      color: Colors.white,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
                       ),
@@ -396,9 +455,7 @@ class _ChiSoScreenState extends State<ChiSoScreen> {
                     ..._dsChiSo.map(
                       (chiSo) => GestureDetector(
                         onTap: () => _suaChiSoDialog(chiSo),
-                        onLongPress:
-                            () =>
-                                _xoaChiSoDialog(chiSo['ma_chi_so'].toString()),
+                        onLongPress: () => _xoaChiSoDialog(chiSo['ma_chi_so']),
                         child: Card(
                           margin: const EdgeInsets.only(bottom: 16),
                           shape: RoundedRectangleBorder(
@@ -411,32 +468,37 @@ class _ChiSoScreenState extends State<ChiSoScreen> {
                               children: [
                                 Text(
                                   'Ngày đo: ${_formatDate(chiSo['ngay_do'])}',
-                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                    color: Colors.teal,
+                                  ),
                                 ),
+                                SizedBox(height: 8),
                                 _buildInfoRow(
                                   'Chiều Cao:',
                                   '${chiSo['chieu_cao_cm']} cm',
-                                  Colors.black,
+                                  Colors.blueAccent,
                                 ),
                                 _buildInfoRow(
                                   'Cân Nặng:',
                                   '${chiSo['can_nang_kg']} kg',
-                                  Colors.black,
+                                  Colors.blueAccent,
                                 ),
                                 _buildInfoRow(
                                   'Huyết Áp:',
                                   '${chiSo['huyet_ap']}',
-                                  Colors.black,
+                                  Colors.blueAccent,
                                 ),
                                 _buildInfoRow(
                                   'Nhịp Tim:',
                                   '${chiSo['nhip_tim']} bpm',
-                                  Colors.black,
+                                  Colors.blueAccent,
                                 ),
                                 _buildInfoRow(
                                   'BMI:',
                                   '${chiSo['BMI']}',
-                                  Colors.black,
+                                  Colors.green,
                                 ),
                               ],
                             ),
