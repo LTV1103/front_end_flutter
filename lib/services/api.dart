@@ -156,7 +156,10 @@ class ApiService {
     return _postRequest('uongnuoc/them', data);
   }
 
-  Future<dynamic> capNhatLuongNuoc(Map<String, dynamic> data, int maLuongNuoc) async {
+  Future<dynamic> capNhatLuongNuoc(
+    Map<String, dynamic> data,
+    int maLuongNuoc,
+  ) async {
     return _putRequest('uongnuoc/capnhat', data);
   }
 
@@ -177,7 +180,7 @@ class ApiService {
     return _postRequest('ghichep', data);
   }
 
-  Future<dynamic> xoaGhiChep(String id) async {
+  Future<dynamic> xoaGhiChep(int id) async {
     return _deleteRequest('ghichep/$id');
   }
 
