@@ -421,7 +421,7 @@ class _ChiSoScreenState extends State<ChiSoScreen> {
                                   ),
                                 ),
                                 Text(
-                                  '${_userData!.hoTen}',
+                                  _userData!.hoTen,
                                   style: TextStyle(
                                     fontSize: 18,
                                     fontWeight: FontWeight.bold,
@@ -436,7 +436,7 @@ class _ChiSoScreenState extends State<ChiSoScreen> {
                                   ),
                                 ),
                                 Text(
-                                  '${_userData!.gioiTinh}',
+                                  _userData!.gioiTinh,
                                   style: TextStyle(
                                     fontSize: 18,
                                     fontWeight: FontWeight.bold,
@@ -492,7 +492,7 @@ class _ChiSoScreenState extends State<ChiSoScreen> {
                                 ),
                                 _buildInfoRow(
                                   'Huyết Áp:',
-                                  '${chiSo.huyetAp}',
+                                  chiSo.huyetAp,
                                   Colors.blueAccent,
                                 ),
                                 _buildInfoRow(
